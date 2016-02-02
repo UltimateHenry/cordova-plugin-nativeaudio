@@ -33,4 +33,6 @@
 
 - (void) parseOptions:(NSDictionary*) options;
 
+- (NSURL*)urlForPlaying:(NSString*)resourcePath;
+
 @end
