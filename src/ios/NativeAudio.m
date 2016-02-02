@@ -7,13 +7,7 @@
 //
 
 #import "NativeAudio.h"
-#import "CDVFile.h"
 #import <AVFoundation/AVAudioSession.h>
-
-#define DOCUMENTS_SCHEME_PREFIX @"documents://"
-#define HTTP_SCHEME_PREFIX @"http://"
-#define HTTPS_SCHEME_PREFIX @"https://"
-#define CDVFILE_PREFIX @"cdvfile://"
 
 @implementation NativeAudio
 
@@ -136,8 +130,7 @@ NSString* INFO_VOLUME_CHANGED = @"(NATIVE AUDIO) Volume changed.";
     NSArray* arguments = command.arguments;
     NSString *audioID = [arguments objectAtIndex:0];
     NSString *assetPath = [arguments objectAtIndex:1];
-    assetPath = [self urlForPlaying:assetPath];
-    
+
     NSNumber *volume = nil;
     if ( [arguments count] > 2 ) {
         volume = [arguments objectAtIndex:2];
@@ -175,7 +168,9 @@ NSString* INFO_VOLUME_CHANGED = @"(NATIVE AUDIO) Volume changed.";
     [self.commandDelegate runInBackground:^{
         if (existingReference == nil) {
             NSString* basePath = [[[NSBundle mainBundle] resourcePath] stringByAppendingPathComponent:@"www"];
-            NSString* path = [NSString stringWithFormat:@"%@/%@", basePath, assetPath];
+            NSString* path = [NSString stringWithFormat:@"%@", assetPath];
+            NSString* pathFromWWW = [NSString stringWithFormat:@"%@/%@", basePath, assetPath];
+
 
             if ([[NSFileManager defaultManager] fileExistsAtPath : path]) {
                 NativeAudioAsset* asset = [[NativeAudioAsset alloc] initWithPath:path
@@ -187,7 +182,16 @@ NSString* INFO_VOLUME_CHANGED = @"(NATIVE AUDIO) Volume changed.";
 
                 NSString *RESULT = [NSString stringWithFormat:@"%@ (%@)", INFO_ASSET_LOADED, audioID];
                 [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: RESULT] callbackId:callbackId];
-
+            } else if ([[NSFileManager defaultManager] fileExistsAtPath : pathFromWWW]) {
+                NativeAudioAsset* asset = [[NativeAudioAsset alloc] initWithPath:pathFromWWW
+                                                                      withVoices:voices
+                                                                      withVolume:volume
+                                                                   withFadeDelay:delay];
+                
+                audioMapping[audioID] = asset;
+                
+                NSString *RESULT = [NSString stringWithFormat:@"%@ (%@)", INFO_ASSET_LOADED, audioID];
+                [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString: RESULT] callbackId:callbackId];
             } else {
                 NSString *RESULT = [NSString stringWithFormat:@"%@ (%@)", ERROR_ASSETPATH_INCORRECT, assetPath];
                 [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: RESULT] callbackId:callbackId];
@@ -480,62 +484,6 @@ static void (mySystemSoundCompletionProc)(SystemSoundID ssID,void* clientData)
             [self.commandDelegate sendPluginResult:[CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString: RESULT] callbackId:callbackId];
         }
     }];
-}
-
-- (NSURL*) urlForPlaying:(NSString*)resourcePath
-{
-    NSURL* resourceURL = nil;
-    NSString* filePath = nil;
-    
-    // first try to find HTTP:// or Documents:// resources
-    
-    if ([resourcePath hasPrefix:HTTP_SCHEME_PREFIX] || [resourcePath hasPrefix:HTTPS_SCHEME_PREFIX]) {
-        // if it is a http url, use it
-        NSLog(@"Will use resource '%@' from the Internet.", resourcePath);
-        resourceURL = [NSURL URLWithString:resourcePath];
-    } else if ([resourcePath hasPrefix:DOCUMENTS_SCHEME_PREFIX]) {
-        NSString* docsPath = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES)[0];
-        filePath = [resourcePath stringByReplacingOccurrencesOfString:DOCUMENTS_SCHEME_PREFIX withString:[NSString stringWithFormat:@"%@/", docsPath]];
-        NSLog(@"Will use resource '%@' from the documents folder with path = %@", resourcePath, filePath);
-    } else if ([resourcePath hasPrefix:CDVFILE_PREFIX]) {
-        CDVFile *filePlugin = [self.commandDelegate getCommandInstance:@"File"];
-        CDVFilesystemURL *url = [CDVFilesystemURL fileSystemURLWithString:resourcePath];
-        filePath = [filePlugin filesystemPathForURL:url];
-        if (filePath == nil) {
-            resourceURL = [NSURL URLWithString:resourcePath];
-        }
-    } else {
-        // attempt to find file path in www directory or LocalFileSystem.TEMPORARY directory
-        filePath = [self.commandDelegate pathForResource:resourcePath];
-        if (filePath == nil) {
-            // see if this exists in the documents/temp directory from a previous recording
-            NSString* testPath = [NSString stringWithFormat:@"%@/%@", [NSTemporaryDirectory()stringByStandardizingPath], resourcePath];
-            if ([[NSFileManager defaultManager] fileExistsAtPath:testPath]) {
-                // inefficient as existence will be checked again below but only way to determine if file exists from previous recording
-                filePath = testPath;
-                NSLog(@"Will attempt to use file resource from LocalFileSystem.TEMPORARY directory");
-            } else {
-                // attempt to use path provided
-                filePath = resourcePath;
-                NSLog(@"Will attempt to use file resource '%@'", filePath);
-            }
-        } else {
-            NSLog(@"Found resource '%@' in the web folder.", filePath);
-        }
-    }
-    // if the resourcePath resolved to a file path, check that file exists
-    if (filePath != nil) {
-        // create resourceURL
-        resourceURL = [NSURL fileURLWithPath:filePath];
-        // try to access file
-        NSFileManager* fMgr = [NSFileManager defaultManager];
-        if (![fMgr fileExistsAtPath:filePath]) {
-            resourceURL = nil;
-            NSLog(@"Unknown resource '%@'", resourcePath);
-        }
-    }
-    
-    return resourceURL;
 }
 
 @end
