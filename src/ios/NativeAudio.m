@@ -7,7 +7,13 @@
 //
 
 #import "NativeAudio.h"
+#import "CDVFile.h"
 #import <AVFoundation/AVAudioSession.h>
+
+#define DOCUMENTS_SCHEME_PREFIX @"documents://"
+#define HTTP_SCHEME_PREFIX @"http://"
+#define HTTPS_SCHEME_PREFIX @"https://"
+#define CDVFILE_PREFIX @"cdvfile://"
 
 @implementation NativeAudio
 
